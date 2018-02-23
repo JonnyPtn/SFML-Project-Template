@@ -1,0 +1,91 @@
+language: c++
+sudo: false
+addons:
+  apt:
+    packages:
+    - cmake
+    - libxrandr-dev
+    - libudev-dev
+    - libopenal-dev
+    - libflac-dev
+    - libvorbis-dev
+    - libenet-dev
+    - libgtk-3-dev
+    - g++-7
+    - gcc-7
+    - clang
+    sources:
+    - ubuntu-toolchain-r-test
+
+before_script:
+- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 90; fi
+- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-7 90; fi
+- if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update; brew install sfml enet; fi
+- git clone https://github.com/sfml/sfml && cd sfml && mkdir build && cd build && cmake .. -G"$GENERATOR" $CMAKE_FLAGS
+- sudo cmake --build . --target install -- $COMPILER_FLAGS
+- cd ../..
+
+script:
+- mkdir build && cd build
+- cmake .. -DCMAKE_BUILD_TYPE=Release -G"$GENERATOR" $CMAKE_FLAGS
+- sudo cmake --build . --target install --config Release -- $COMPILER_FLAGS
+- sudo cmake --build . --target package --config Release -- $COMPILER_FLAGS
+
+- cd ../ && mkdir deploy
+- cp build/$PACKAGE_NAME deploy
+matrix:
+  fast_finish: true
+  include:
+  - os: linux
+    compiler: gcc
+    env: 
+     - GENERATOR="Unix Makefiles"
+     - CMAKE_FLAGS=""
+     - COMPILER_FLAGS=""
+     - PACKAGE_NAME="*.deb"
+
+  - os: linux
+    compiler: clang
+    env: 
+     - GENERATOR="Unix Makefiles"
+     - CMAKE_FLAGS=""
+     - COMPILER_FLAGS=""
+     - PACKAGE_NAME="*.deb"
+
+  - os: osx
+    osx_image: xcode9
+    env: 
+     - GENERATOR="Xcode"
+     - CMAKE_FLAGS=""
+     - COMPILER_FLAGS=""
+     - PACKAGE_NAME="*.dmg"
+
+  # actually ios...
+  - os: osx
+    osx_image: xcode9
+    env: 
+     - GENERATOR="Xcode"
+     - CMAKE_FLAGS="-DCMAKE_TOOLCHAIN_FILE=../cmake/toolchains/iOS.toolchain.cmake"
+     - COMPILER_FLAGS="-arch arm64 -sdk iphoneos"
+     - PACKAGE_NAME="*.dmg"
+
+   # Let iOS builds fail for now, until I work out the codesigning stuff...
+  allow_failures:
+    - os: osx
+      osx_image: xcode9
+      env: 
+       - GENERATOR="Xcode"
+       - CMAKE_FLAGS="-DCMAKE_TOOLCHAIN_FILE=../cmake/toolchains/iOS.toolchain.cmake"
+       - COMPILER_FLAGS="-arch arm64 -sdk iphoneos"
+       - PACKAGE_NAME="*.dmg"
+       
+deploy:
+  provider: releases
+  api_key: "$GITHUB_TOKEN"
+  file_glob: true
+  file: deploy/$PACKAGE_NAME
+  overwrite: true
+  skip_cleanup: true
+  prerelease: true
+  on:
+   tags: true
